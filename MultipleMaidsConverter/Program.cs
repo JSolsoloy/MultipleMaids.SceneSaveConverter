@@ -232,7 +232,12 @@ namespace MultipleMaidsConverter
                     if (!saveSceneEntries.Contains(index))
                     {
                         saveSceneEntries.Add(index);
-                        ConvertSceneToPng(index, MMScene);
+                        Mode mode = ConvertSceneToPng(index, MMScene);
+                        if (mode == Mode.Error)
+                        {
+                            Console.WriteLine($"Unexpected values found! Is '{Path.GetFileName(ini)}' a MultipleMaids config?");
+                            return Mode.Error;
+                        }
                     }
                 }
                 else
@@ -245,28 +250,38 @@ namespace MultipleMaidsConverter
             return Mode.Success;
         }
 
-        private static void ConvertSceneToPng(int index, IniSection MMScene)
+        private static Mode ConvertSceneToPng(int index, IniSection MMScene)
         {
             byte[] sceneBuffer;
             byte[] screenshotBuffer = defaultImage;
             string sceneString = MMScene.GetKey($"s{index}")?.RawValue;
             string screenshotString = MMScene.GetKey($"ss{index}")?.RawValue;
+            string dateString;
+
+            try
+            {
+                dateString = $"{DateTime.Parse(sceneString.Split(',')[0]):yyyyMMddHHmm}";
+            }
+            catch (System.FormatException)
+            {
+                return Mode.Error;
+            }
 
             if (index >= 10000)
             {
                 Log(index, " Kankyo found! Skipping.");
-                return;
+                return Mode.Success;
             }
             else if (index == 9999)
             {
                 Log(index, " Quick save found! Skipping.");
-                return;
+                return Mode.Success;
             }
 
             if (String.IsNullOrEmpty(sceneString))
             {
                 Log(index, " No scene found! Skipping.");
-                return;
+                return Mode.Success;
             }
             else
             {
@@ -289,8 +304,6 @@ namespace MultipleMaidsConverter
 
             Log(index, "Converting");
 
-            String dateString = $"{DateTime.Parse(sceneString.Split(',')[0]):yyyyMMddHHmm}";
-
             string savePngFilename = $"s{index}_{dateString}.png";
             string outPath = Path.Combine(outDir, savePngFilename);
 
@@ -303,6 +316,8 @@ namespace MultipleMaidsConverter
             Log(index, $" Outputted to {outPath}");
 
             Log(index, " Conversion successful.");
+
+            return Mode.Success;
         }
 
         private static void Log(int index, string message)
