@@ -8,7 +8,7 @@ namespace MultipleMaidsConverter
 {
     class Program
     {
-        internal enum Mode : byte { Png, Ini, Error, Success }
+        internal enum Mode : byte { Png, Ini, Error, Success, Help }
         internal const int sceneIndex = 0;
         internal const int screenshotIndex = 1;
         internal static readonly string outDir = Path.Combine(Directory.GetCurrentDirectory(), "MultipleMaids Converter");
@@ -38,7 +38,7 @@ namespace MultipleMaidsConverter
             else
             {
                 Console.WriteLine("Usage: MMSaveSceneConvert (<MM ini file> | <MM Save PNGs>...)");
-                Environment.Exit(1);
+                Environment.ExitCode = 1;
             }
 
             if (mode == Mode.Error)
@@ -49,10 +49,6 @@ namespace MultipleMaidsConverter
             else if (mode == Mode.Success)
             {
                 Console.WriteLine("Conversion successful");
-            }
-            else
-            {
-                Console.WriteLine("What?");
             }
 
             Console.Write("Press any key key to exit...");
@@ -73,7 +69,7 @@ namespace MultipleMaidsConverter
                 }
             }
 
-            return Mode.Error;
+            return Mode.Help;
         }
 
         private static Mode ConvertPng(string[] pngs)
