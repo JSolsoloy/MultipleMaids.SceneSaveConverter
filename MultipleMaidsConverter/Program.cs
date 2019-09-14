@@ -83,7 +83,7 @@ namespace MultipleMaidsConverter
 
             IniFile MMIni = new IniFile();
 
-            IniSection sceneSection = MMIni.CreateSection("scene");
+            MMIni.CreateSection("config");
 
             foreach (string png in pngs)
             {
@@ -115,6 +115,11 @@ namespace MultipleMaidsConverter
                     index += 1;
                 }
             }
+
+            // Round up to the nearest hundred
+            int sceneMax = (int)Math.Ceiling((double)(index - 1) / 100) * 100;
+
+            MMIni["config"]["scene_max"].Value = sceneMax.ToString();
 
             MMIni.Save(Path.Combine(outDir, "MultipleMaids.ini"));
 
