@@ -7,8 +7,6 @@ namespace MultipleMaidsConverter
 {
     internal static class LZMA
     {
-        private const int Dictionary = 1 << 23;
-
         private static readonly CoderPropID[] PropIDs =
         {
         CoderPropID.DictionarySize,
@@ -23,7 +21,7 @@ namespace MultipleMaidsConverter
 
         private static readonly object[] Properties =
         {
-        Dictionary,
+        1 << 23,
         2,
         3,
         0,
@@ -53,7 +51,7 @@ namespace MultipleMaidsConverter
             return outStream.ToArray();
         }
 
-        public static MemoryStream Decompress(MemoryStream inStream)
+        public static MemoryStream Decompress(Stream inStream)
         {
             MemoryStream outStream = new MemoryStream();
 

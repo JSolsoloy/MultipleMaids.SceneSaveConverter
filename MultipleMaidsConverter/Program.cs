@@ -9,7 +9,7 @@ namespace MultipleMaidsConverter
     class Program
     {
         internal enum Mode : byte { Png, Ini, Error, Success }
-        internal static readonly string outDir = Path.Combine(Directory.GetCurrentDirectory(), "MMConverterOutput");
+        internal static readonly string outDir = Path.Combine(Directory.GetCurrentDirectory(), "MultipleMaids Converter");
         internal static readonly byte[] defaultImage = MultipleMaidsConverter.Properties.Resources.defaultImage;
         internal static readonly byte[] pngHeader = { 137, 80, 78, 71, 13, 10, 26, 10 };
         internal static readonly byte[] pngEnd = Encoding.ASCII.GetBytes("IEND");
@@ -74,30 +74,27 @@ namespace MultipleMaidsConverter
         {
             Mode mode = Mode.Error;
 
+            string[] sceneData = new string[2];
+
             foreach (string png in pngs)
             {
                 if (!File.Exists(png))
                 {
-                    Console.WriteLine($"{png} does not exist! Skipping");
+                    Log(png, "Does not exist! Skipping");
                     continue;
                 }
 
                 if (Path.GetExtension(png).ToLowerInvariant() != ".png")
                 {
-                    Console.WriteLine($"{png} is not a png file! Skipping");
+                    Log(png, "Not a png file! Skipping");
                     continue;
                 }
 
-                ConvertPngToScene(png);
+                sceneData = ConvertPngToScene(png);
             }
+            Console.WriteLine("Converted successfully");
 
             return mode;
-        }
-
-        private static Mode ConvertPngToScene(string png)
-        {
-            // TODO: this stuff
-            return Mode.Error;
         }
 
         private static bool BytesEqual(byte[] a, byte[] b)
@@ -116,6 +113,68 @@ namespace MultipleMaidsConverter
             }
 
             return true;
+        }
+
+        private static string[] ConvertPngToScene(string png)
+        {
+            Log(png, "Converting");
+
+            string[] sceneData = new string[2];
+            int sceneString = 0;
+            int base64Screenshot = 1;
+
+            using (FileStream fileStream = File.OpenRead(png))
+            {
+                byte[] headerBuffer = new byte[pngHeader.Length];
+
+                fileStream.Read(headerBuffer, 0, pngHeader.Length);
+
+                if (!BytesEqual(headerBuffer, pngHeader))
+                {
+                    Log(png, "Not a png file! Skipping");
+                    return null;
+                }
+
+                using (MemoryStream screenshotStream = new MemoryStream())
+                {
+                    fileStream.Position = 0;
+                    byte[] buffer = new byte[pngEnd.Length];
+                    long position = 0;
+
+                    while (true)
+                    {
+                        int bytesRead = fileStream.Read(buffer, 0, buffer.Length);
+
+                        if (bytesRead != pngEnd.Length)
+                        {
+                            Log(png, "Not a png file! Skipping");
+                            return null;
+                        }
+
+                        if (BytesEqual(buffer, pngEnd))
+                        {
+                            // Write IEND bytes
+                            screenshotStream.Write(buffer, 0, 4);
+                            // Read and then write CRC
+                            fileStream.Read(buffer, 0, 4);
+                            screenshotStream.Write(buffer, 0, 4);
+                            break;
+                        }
+                        else
+                        {
+                            screenshotStream.Write(buffer, 0, 1);
+                        }
+                        fileStream.Position = ++position;
+                    }
+                    sceneData[base64Screenshot] = Convert.ToBase64String(screenshotStream.ToArray());
+                }
+
+                using (MemoryStream sceneStream = LZMA.Decompress(fileStream))
+                {
+                    sceneData[sceneString] = Encoding.UTF8.GetString(sceneStream.ToArray());
+                }
+            }
+            return sceneData;
         }
 
         private static Mode ConvertIni(string ini)
@@ -147,7 +206,6 @@ namespace MultipleMaidsConverter
                     int index = Int32.Parse(key.Substring(1 + (key[1] == 's' ? 1 : 0)));
                     if (!saveSceneEntries.Contains(index))
                     {
-                        Log(index, "Converting");
                         saveSceneEntries.Add(index);
                         ConvertSceneToPng(index, MMScene);
                     }
@@ -199,17 +257,17 @@ namespace MultipleMaidsConverter
                 screenshotBuffer = Convert.FromBase64String(screenshotString);
             }
 
+            Log(index, "Converting");
+
             String dateString = $"{DateTime.Parse(sceneString.Split(',')[0]):yyyyMMddHHmm}";
 
             string savePngFilename = $"s{index}_{dateString}.png";
             string outPath = Path.Combine(outDir, savePngFilename);
 
             using (FileStream stream = File.Create(outPath))
-            using (BinaryWriter writer = new BinaryWriter(stream))
             {
-                writer.Write(screenshotBuffer);
-                writer.Write(sceneBuffer);
-
+                stream.Write(screenshotBuffer, 0, screenshotBuffer.Length);
+                stream.Write(sceneBuffer, 0, sceneBuffer.Length);
             }
 
             Log(index, $" Outputted to {outPath}");
@@ -220,6 +278,11 @@ namespace MultipleMaidsConverter
         private static void Log(int index, string message)
         {
             Console.WriteLine($"s{index}: {message}");
+        }
+
+        private static void Log(string file, string message)
+        {
+            Console.WriteLine($"{Path.GetFileName(file)}: {message}");
         }
     }
 }
