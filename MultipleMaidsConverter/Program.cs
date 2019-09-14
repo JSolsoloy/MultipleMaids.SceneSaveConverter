@@ -196,7 +196,7 @@ namespace MultipleMaidsConverter
 
                 using (MemoryStream sceneStream = LZMA.Decompress(fileStream))
                 {
-                    sceneData[sceneIndex] = Encoding.UTF8.GetString(sceneStream.ToArray());
+                    sceneData[sceneIndex] = Encoding.Unicode.GetString(sceneStream.ToArray());
                 }
             }
             return sceneData;
@@ -271,7 +271,7 @@ namespace MultipleMaidsConverter
             else
             {
                 Log(index, " Found scene.");
-                using (MemoryStream stream = new MemoryStream(Encoding.ASCII.GetBytes(sceneString)))
+                using (MemoryStream stream = new MemoryStream(Encoding.Unicode.GetBytes(sceneString)))
                 {
                     sceneBuffer = LZMA.Compress(stream);
                 }
