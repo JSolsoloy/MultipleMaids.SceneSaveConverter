@@ -252,16 +252,8 @@ namespace MultipleMaidsConverter
             byte[] screenshotBuffer = defaultImage;
             string sceneString = MMScene.GetKey($"s{index}")?.RawValue;
             string screenshotString = MMScene.GetKey($"ss{index}")?.RawValue;
-            string dateString;
 
-            try
-            {
-                dateString = $"{DateTime.Parse(sceneString.Split(',')[0]):yyyyMMddHHmm}";
-            }
-            catch (System.FormatException)
-            {
-                return Mode.Error;
-            }
+            Log(index, "Converting");
 
             if (index >= 10000)
             {
@@ -288,6 +280,24 @@ namespace MultipleMaidsConverter
                 }
             }
 
+            string[] sceneParameters = sceneString.Split(',');
+            string lastParameter = sceneParameters[sceneParameters.Length - 1];
+            DateTime dateSaved;
+
+            if (lastParameter.LastIndexOf(';') != lastParameter.Length - 1)
+            {
+                return Mode.Error;
+            }
+
+            try
+            {
+                dateSaved = DateTime.Parse(sceneParameters[0]);
+            }
+            catch
+            {
+                return Mode.Error;
+            }
+
             if (String.IsNullOrEmpty(screenshotString))
             {
                 Log(index, " No screenshot found!");
@@ -298,9 +308,7 @@ namespace MultipleMaidsConverter
                 screenshotBuffer = Convert.FromBase64String(screenshotString);
             }
 
-            Log(index, "Converting");
-
-            string savePngFilename = $"s{index}_{dateString}.png";
+            string savePngFilename = $"s{index}_{dateSaved.ToString("yyyyMMddHHmm")}.png";
             string outPath = Path.Combine(outDir, savePngFilename);
 
             using (FileStream stream = File.Create(outPath))
