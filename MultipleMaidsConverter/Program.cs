@@ -317,6 +317,9 @@ namespace MultipleMaidsConverter
                 stream.Write(sceneBuffer, 0, sceneBuffer.Length);
             }
 
+            File.SetCreationTime(outPath, dateSaved);
+            File.SetLastWriteTime(outPath, dateSaved);
+
             Log(index, $" Outputted to {outPath}");
 
             Log(index, " Conversion successful.");
