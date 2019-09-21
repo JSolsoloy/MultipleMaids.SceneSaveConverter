@@ -15,6 +15,7 @@ namespace MultipleMaidsConverter
         internal static readonly byte[] defaultImage = MultipleMaidsConverter.Properties.Resources.defaultImage;
         internal static readonly byte[] pngHeader = { 137, 80, 78, 71, 13, 10, 26, 10 };
         internal static readonly byte[] pngEnd = Encoding.ASCII.GetBytes("IEND");
+        internal static readonly int[] border = { -1, 0, 0, 0, 0 };
 
         private static void Main(string[] args)
         {
@@ -140,6 +141,29 @@ namespace MultipleMaidsConverter
             return true;
         }
 
+        private static long FindPngEnd(FileStream stream)
+        {
+            long bytesRead = 0;
+            int j = 0;
+            int b;
+
+            while ((b = stream.ReadByte()) != -1)
+            {
+                bytesRead++;
+                while (j >= 0 && b != pngEnd[j])
+                {
+                    j = border[j];
+                }
+
+                if (++j == pngEnd.Length)
+                {
+                    stream.Position += 4;
+                    return stream.Position;
+                }
+            }
+            return -1;
+        }
+
         private static string[] ConvertPngToScene(string png)
         {
 
@@ -157,42 +181,35 @@ namespace MultipleMaidsConverter
                     return null;
                 }
 
-                using (MemoryStream screenshotStream = new MemoryStream())
+                long length = FindPngEnd(fileStream);
+
+                if (length == -1)
                 {
-                    fileStream.Position = 0;
-                    byte[] buffer = new byte[pngEnd.Length];
-                    long position = 0;
-
-                    while (true)
-                    {
-                        int bytesRead = fileStream.Read(buffer, 0, buffer.Length);
-
-                        if (bytesRead != pngEnd.Length)
-                        {
-                            return null;
-                        }
-
-                        if (BytesEqual(buffer, pngEnd))
-                        {
-                            // Write IEND bytes
-                            screenshotStream.Write(buffer, 0, 4);
-                            // Read and then write CRC
-                            fileStream.Read(buffer, 0, 4);
-                            screenshotStream.Write(buffer, 0, 4);
-                            break;
-                        }
-                        else
-                        {
-                            screenshotStream.Write(buffer, 0, 1);
-                        }
-                        fileStream.Position = ++position;
-                    }
-                    sceneData[screenshotIndex] = Convert.ToBase64String(screenshotStream.ToArray());
+                    Log(png, "Not a png file! Skipping.");
+                    return null;
                 }
 
                 using (MemoryStream sceneStream = LZMA.Decompress(fileStream))
                 {
                     sceneData[sceneIndex] = Encoding.Unicode.GetString(sceneStream.ToArray());
+                }
+
+                using (MemoryStream screenshotStream = new MemoryStream())
+                {
+                    fileStream.Position = 0;
+                    byte[] buf = new byte[4096];
+
+                    while(length > 0)
+                    {
+                        int bytesRead = fileStream.Read(buf, 0, (int)Math.Min(length, buf.Length));
+
+                        if (bytesRead == 0) break;
+
+                        length -= bytesRead;
+
+                        screenshotStream.Write(buf, 0, bytesRead);
+                    }
+                    sceneData[screenshotIndex] = Convert.ToBase64String(screenshotStream.ToArray());
                 }
             }
             return sceneData;
