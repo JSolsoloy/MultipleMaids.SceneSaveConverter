@@ -11,7 +11,7 @@ namespace MultipleMaidsConverter
         internal enum Mode : byte { Png, Ini, Error, Success, Help }
         internal const int sceneIndex = 0;
         internal const int screenshotIndex = 1;
-        internal static readonly string outDir = Path.Combine(Directory.GetCurrentDirectory(), "MultipleMaids Converter");
+        internal static readonly string outDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "MultipleMaids Converter");
         internal static readonly byte[] defaultImage = MultipleMaidsConverter.Properties.Resources.defaultImage;
         internal static readonly byte[] pngHeader = { 137, 80, 78, 71, 13, 10, 26, 10 };
         internal static readonly byte[] pngEnd = Encoding.ASCII.GetBytes("IEND");
