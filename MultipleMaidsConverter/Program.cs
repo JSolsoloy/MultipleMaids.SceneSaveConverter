@@ -12,9 +12,12 @@ namespace MultipleMaidsConverter
         internal const int sceneIndex = 0;
         internal const int screenshotIndex = 1;
         internal static readonly string outDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "MultipleMaids Converter");
+        internal static readonly string sceneDir = Path.Combine(outDir, "MultipleMaidsScene");
+        internal static readonly string kankyouDir = Path.Combine(outDir, "MultipleMaidsKankyou");
         internal static readonly byte[] defaultImage = MultipleMaidsConverter.Properties.Resources.defaultImage;
         internal static readonly byte[] pngHeader = { 137, 80, 78, 71, 13, 10, 26, 10 };
         internal static readonly byte[] pngEnd = Encoding.ASCII.GetBytes("IEND");
+        internal static readonly byte[] kankyoHeader = Encoding.ASCII.GetBytes("KANKYO");
         internal static readonly int[] border = { -1, 0, 0, 0, 0 };
 
         private static void Main(string[] args)
@@ -75,12 +78,16 @@ namespace MultipleMaidsConverter
 
         private static Mode ConvertPng(string[] pngs)
         {
-            int index = 1;
+            int sceneIndex = 1;
+            int kankyouIndex = 10000;
             string[] sceneData = new string[2];
+            bool kankyou = false;
 
             IniFile MMIni = new IniFile();
 
             MMIni.CreateSection("config");
+            MMIni.CreateSection("scene");
+            MMIni.CreateSection("kankyo");
 
             foreach (string png in pngs)
             {
@@ -98,7 +105,7 @@ namespace MultipleMaidsConverter
 
                 Log(png, "Converting");
 
-                sceneData = ConvertPngToScene(png);
+                sceneData = ConvertPngToScene(png, out kankyou);
 
                 if (sceneData == null)
                 {
@@ -107,20 +114,33 @@ namespace MultipleMaidsConverter
                 else
                 {
                     Log(png, " Converted successfully.");
-                    MMIni["scene"][$"s{index}"].Value = sceneData[sceneIndex];
-                    MMIni["scene"][$"ss{index}"].Value = sceneData[screenshotIndex];
-                    index += 1;
+                    if (kankyou)
+                    {
+                        MMIni["scene"][$"s{kankyouIndex}"].Value = sceneData[Program.sceneIndex];
+                        MMIni["scene"][$"ss{kankyouIndex}"].Value = sceneData[screenshotIndex];
+                        MMIni["kankyo"][$"kankyo{kankyouIndex - 9999}"].Value = $"kankyo{kankyouIndex - 9999}";
+                        kankyouIndex += 1;
+                    }
+                    else
+                    {
+                        MMIni["scene"][$"s{sceneIndex}"].Value = sceneData[Program.sceneIndex];
+                        MMIni["scene"][$"ss{sceneIndex}"].Value = sceneData[screenshotIndex];
+                        sceneIndex += 1;
+                    }
                 }
             }
 
             // Round up to the nearest hundred
-            int sceneMax = (int)Math.Ceiling((double)(index - 1) / 100) * 100;
+            int sceneMax = (int)Math.Ceiling((double)(sceneIndex - 1) / 100) * 100;
+            int kankyoMax = (int)Math.Ceiling((double)(kankyouIndex - 10000) / 10) * 10;
+            if (kankyoMax < 20) kankyoMax = 20;
 
             MMIni["config"]["scene_max"].Value = sceneMax.ToString();
+            MMIni["config"]["kankyo_max"].Value = kankyoMax.ToString();
 
             MMIni.Save(Path.Combine(outDir, "MultipleMaids.ini"));
 
-            return index == 1 ? Mode.Error : Mode.Success;
+            return sceneIndex == 1 ? Mode.Error : Mode.Success;
         }
 
         private static bool BytesEqual(byte[] a, byte[] b)
@@ -143,13 +163,11 @@ namespace MultipleMaidsConverter
 
         private static long FindPngEnd(FileStream stream)
         {
-            long bytesRead = 0;
             int j = 0;
             int b;
 
             while ((b = stream.ReadByte()) != -1)
             {
-                bytesRead++;
                 while (j >= 0 && b != pngEnd[j])
                 {
                     j = border[j];
@@ -164,10 +182,10 @@ namespace MultipleMaidsConverter
             return -1;
         }
 
-        private static string[] ConvertPngToScene(string png)
+        private static string[] ConvertPngToScene(string png, out bool kankyou)
         {
-
             string[] sceneData = new string[2];
+            kankyou = false;
 
             using (FileStream fileStream = File.OpenRead(png))
             {
@@ -189,6 +207,19 @@ namespace MultipleMaidsConverter
                     return null;
                 }
 
+                byte[] kankyoBuffer = new byte[kankyoHeader.Length];
+
+                fileStream.Read(kankyoBuffer, 0, kankyoBuffer.Length);
+
+                if (BytesEqual(kankyoBuffer, kankyoHeader))
+                {
+                    kankyou = true;
+                }
+                else
+                {
+                    fileStream.Position -= kankyoHeader.Length;
+                }
+
                 using (MemoryStream sceneStream = LZMA.Decompress(fileStream))
                 {
                     sceneData[sceneIndex] = Encoding.Unicode.GetString(sceneStream.ToArray());
@@ -199,7 +230,7 @@ namespace MultipleMaidsConverter
                     fileStream.Position = 0;
                     byte[] buf = new byte[4096];
 
-                    while(length > 0)
+                    while (length > 0)
                     {
                         int bytesRead = fileStream.Read(buf, 0, (int)Math.Min(length, buf.Length));
 
@@ -230,6 +261,12 @@ namespace MultipleMaidsConverter
                 Console.WriteLine($"'scene' section wasn't found! Is '{Path.GetFileName(ini)}' a MultipleMaids config?");
                 return Mode.Error;
             }
+
+            if (!Directory.Exists(sceneDir))
+                Directory.CreateDirectory(sceneDir);
+
+            if (!Directory.Exists(kankyouDir))
+                Directory.CreateDirectory(kankyouDir);
 
             IniSection MMScene = MMIni["scene"];
 
@@ -269,15 +306,11 @@ namespace MultipleMaidsConverter
             byte[] screenshotBuffer = defaultImage;
             string sceneString = MMScene.GetKey($"s{index}")?.RawValue;
             string screenshotString = MMScene.GetKey($"ss{index}")?.RawValue;
+            bool kankyou = false;
 
             Log(index, "Converting");
 
-            if (index >= 10000)
-            {
-                Log(index, " Kankyo found! Skipping.");
-                return Mode.Success;
-            }
-            else if (index == 9999)
+            if (index == 9999)
             {
                 Log(index, " Quick save found! Skipping.");
                 return Mode.Success;
@@ -290,7 +323,14 @@ namespace MultipleMaidsConverter
             }
             else
             {
-                Log(index, " Found scene.");
+                if (index >= 10000)
+                {
+                    kankyou = true;
+                    Log(index, " Found kankyou.");
+                }
+                else
+                    Log(index, " Found scene.");
+
                 using (MemoryStream stream = new MemoryStream(Encoding.Unicode.GetBytes(sceneString)))
                 {
                     sceneBuffer = LZMA.Compress(stream);
@@ -326,12 +366,13 @@ namespace MultipleMaidsConverter
             }
 
             string savePngFilename = $"s{index}_{dateSaved.ToString("yyyyMMddHHmm")}.png";
-            string outPath = Path.Combine(outDir, savePngFilename);
+            string outPath = Path.Combine(kankyou ? kankyouDir : sceneDir, savePngFilename);
 
-            using (FileStream stream = File.Create(outPath))
+            using (BinaryWriter stream = new BinaryWriter(File.Create(outPath)))
             {
-                stream.Write(screenshotBuffer, 0, screenshotBuffer.Length);
-                stream.Write(sceneBuffer, 0, sceneBuffer.Length);
+                stream.Write(screenshotBuffer);
+                if (kankyou) stream.Write(kankyoHeader);
+                stream.Write(sceneBuffer);
             }
 
             File.SetCreationTime(outPath, dateSaved);
